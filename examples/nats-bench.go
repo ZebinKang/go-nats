@@ -13,6 +13,8 @@ import (
 
 	"github.com/nats-io/go-nats"
 	"github.com/nats-io/go-nats/bench"
+	"encoding/binary"
+	bytes "bytes"
 )
 
 // Some sane defaults
@@ -59,7 +61,7 @@ func main() {
 	}
 	opts.Secure = *tls
 
-	benchmark = bench.NewBenchmark("NATS", *numSubs, *numPubs)
+	benchmark = bench.NewBenchmark("NATS", *numSubs, *numPubs,*numMsgs)
 
 	var startwg sync.WaitGroup
 	var donewg sync.WaitGroup
@@ -69,7 +71,7 @@ func main() {
 	// Run Subscribers first
 	startwg.Add(*numSubs)
 	for i := 0; i < *numSubs; i++ {
-		go runSubscriber(&startwg, &donewg, opts, *numMsgs, *msgSize)
+		go runSubscriber(&startwg, &donewg, opts, *numMsgs, *msgSize, i)
 	}
 	startwg.Wait()
 
@@ -114,6 +116,8 @@ func runPublisher(startwg, donewg *sync.WaitGroup, opts nats.Options, numMsgs in
 	start := time.Now()
 
 	for i := 0; i < numMsgs; i++ {
+		now:=time.Now().UnixNano()
+		binary.BigEndian.PutUint64(msg, uint64(now))
 		nc.Publish(subj, msg)
 	}
 	nc.Flush()
@@ -122,7 +126,7 @@ func runPublisher(startwg, donewg *sync.WaitGroup, opts nats.Options, numMsgs in
 	donewg.Done()
 }
 
-func runSubscriber(startwg, donewg *sync.WaitGroup, opts nats.Options, numMsgs int, msgSize int) {
+func runSubscriber(startwg, donewg *sync.WaitGroup, opts nats.Options, numMsgs int, msgSize int, subIndex int) {
 	nc, err := opts.Connect()
 	if err != nil {
 		log.Fatalf("Can't connect: %v\n", err)
@@ -134,8 +138,14 @@ func runSubscriber(startwg, donewg *sync.WaitGroup, opts nats.Options, numMsgs i
 	received := 0
 	start := time.Now()
 	nc.Subscribe(subj, func(msg *nats.Msg) {
+		now:=time.Now().UnixNano()
+		var ret int64
+		buf := bytes.NewBuffer(msg.Data[0:8])
+		binary.Read(buf, binary.BigEndian, &ret)
+		benchmark.AddSubLatency(subIndex,(int)(now-ret))
 		received++
 		if received >= numMsgs {
+			benchmark.ExportLatency(msgSize)
 			benchmark.AddSubSample(bench.NewSample(numMsgs, msgSize, start, time.Now(), nc))
 			donewg.Done()
 			nc.Close()
