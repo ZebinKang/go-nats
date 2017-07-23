@@ -46,6 +46,7 @@ type Benchmark struct {
 	subLatencyIndex []int
 	pairNum int
 	msgSize int
+	msgNum int
 }
 
 // NewBenchmark initializes a Benchmark. After creating a bench call AddSubSample/AddPubSample.
@@ -60,11 +61,12 @@ func NewBenchmark(name string, subCnt, pubCnt int, num int,size int) *Benchmark 
 	bm.subLatencyIndex= make([]int, subCnt)
 	bm.pairNum=subCnt
 	bm.msgSize=size
+	bm.msgNum=num
 	return &bm
 }
 
 func (bm *Benchmark) AddSubLatency(subIndex int, latency int) {
-	bm.subLatency[bm.subLatencyIndex[subIndex]]=latency
+	bm.subLatency[bm.msgNum*subIndex+bm.subLatencyIndex[subIndex]]=latency
 	bm.subLatencyIndex[subIndex]+=1
 }
 
