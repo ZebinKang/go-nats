@@ -64,16 +64,16 @@ func (bm *Benchmark) AddSubLatency(subIndex int, latency int) {
 	bm.subLatencyIndex[subIndex]+=1
 }
 
-func (bm *Benchmark) ExportLatency(size int){
+func (bm *Benchmark) ExportLatency(size int, pariNum int){
 	sort.Ints(bm.subLatency)
 	TIME_SLICE:=1000
 	numMsgsForEachSlice := len(bm.subLatency) / TIME_SLICE
-	f, _ := os.Create(fmt.Sprintf("%s%d%s","./latency/1pair_subLatency_",size,".csv"))
+	f, _ := os.Create(fmt.Sprintf("%s%d%s%d%s","./latency/",pariNum,"pair_subLatency_",size,".csv"))
 	f.WriteString("Index,Latency\n")
 	for i := 0; i < len(bm.subLatency); i++ {
 		if i%numMsgsForEachSlice == 0 {
 			f.WriteString(fmt.Sprintf("%d%s%d%s",i/numMsgsForEachSlice,
-				",", bm.subLatency[i], "\n"))
+				",", bm.subLatency[i+numMsgsForEachSlice-1], "\n"))
 		}
 	}
 	f.Sync()
