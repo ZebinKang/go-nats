@@ -45,19 +45,21 @@ type Benchmark struct {
 	subLatency []int
 	subLatencyIndex []int
 	pairNum int
+	msgSize int
 }
 
 // NewBenchmark initializes a Benchmark. After creating a bench call AddSubSample/AddPubSample.
 // When done collecting samples, call EndBenchmark
-func NewBenchmark(name string, subCnt, pubCnt int, num int) *Benchmark {
+func NewBenchmark(name string, subCnt, pubCnt int, num int,size int) *Benchmark {
 	bm := Benchmark{Name: name, RunID: nuid.Next()}
 	bm.Subs = NewSampleGroup()
 	bm.Pubs = NewSampleGroup()
 	bm.subChannel = make(chan *Sample, subCnt)
 	bm.pubChannel = make(chan *Sample, pubCnt)
 	bm.subLatency= make([]int, subCnt*num)
-	bm.subLatencyIndex= make([]int, num)
+	bm.subLatencyIndex= make([]int, subCnt)
 	bm.pairNum=subCnt
+	bm.msgSize=size
 	return &bm
 }
 
@@ -279,6 +281,7 @@ func (sg *SampleGroup) HasSamples() bool {
 
 // Report returns a human readable report of the samples taken in the Benchmark
 func (bm *Benchmark) Report() string {
+	bm.ExportLatency(bm.msgSize)
 	var buffer bytes.Buffer
 
 	indent := ""

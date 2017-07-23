@@ -61,7 +61,7 @@ func main() {
 	}
 	opts.Secure = *tls
 
-	benchmark = bench.NewBenchmark("NATS", *numSubs, *numPubs,*numMsgs)
+	benchmark = bench.NewBenchmark("NATS", *numSubs, *numPubs,*numMsgs,*msgSize)
 
 	var startwg sync.WaitGroup
 	var donewg sync.WaitGroup
@@ -77,9 +77,8 @@ func main() {
 
 	// Now Publishers
 	startwg.Add(*numPubs)
-	pubCounts := bench.MsgsPerClient(*numMsgs, *numPubs)
 	for i := 0; i < *numPubs; i++ {
-		go runPublisher(&startwg, &donewg, opts, pubCounts[i], *msgSize)
+		go runPublisher(&startwg, &donewg, opts, *numMsgs, *msgSize,i)
 	}
 
 	log.Printf("Starting benchmark [msgs=%d, msgsize=%d, pubs=%d, subs=%d]\n", *numMsgs, *msgSize, *numPubs, *numSubs)
@@ -98,7 +97,7 @@ func main() {
 	}
 }
 
-func runPublisher(startwg, donewg *sync.WaitGroup, opts nats.Options, numMsgs int, msgSize int) {
+func runPublisher(startwg, donewg *sync.WaitGroup, opts nats.Options, numMsgs int, msgSize int, pubIndex int) {
 	nc, err := opts.Connect()
 	if err != nil {
 		log.Fatalf("Can't connect: %v\n", err)
@@ -114,11 +113,16 @@ func runPublisher(startwg, donewg *sync.WaitGroup, opts nats.Options, numMsgs in
 	}
 
 	start := time.Now()
-
+	var tmp []byte= make([]byte, 8)
 	for i := 0; i < numMsgs; i++ {
 		now:=time.Now().UnixNano()
 		binary.BigEndian.PutUint64(msg, uint64(now))
-		nc.Publish(subj, msg)
+		binary.BigEndian.PutUint64(tmp, uint64(i))
+		for j:=0;j<8;j++{
+			msg[j+8]=tmp[j]
+		}
+		result:=fmt.Sprintf("%s%d",subj,pubIndex)
+		nc.Publish(result, msg)
 	}
 	nc.Flush()
 	benchmark.AddPubSample(bench.NewSample(numMsgs, msgSize, start, time.Now(), nc))
@@ -137,15 +141,18 @@ func runSubscriber(startwg, donewg *sync.WaitGroup, opts nats.Options, numMsgs i
 
 	received := 0
 	start := time.Now()
-	nc.Subscribe(subj, func(msg *nats.Msg) {
+	result:=fmt.Sprintf("%s%d",subj,subIndex)
+	nc.Subscribe(result, func(msg *nats.Msg) {
 		now:=time.Now().UnixNano()
 		var ret int64
 		buf := bytes.NewBuffer(msg.Data[0:8])
 		binary.Read(buf, binary.BigEndian, &ret)
-		benchmark.AddSubLatency(subIndex,(int)(now-ret))
 		received++
-		if received >= numMsgs {
-			benchmark.ExportLatency(msgSize)
+		var msgIndex int64
+		buf2 := bytes.NewBuffer(msg.Data[8:16])
+		binary.Read(buf2, binary.BigEndian, &msgIndex)
+		benchmark.AddSubLatency(subIndex,(int)(now-ret))
+		if msgIndex+1 >= (int64)(numMsgs) {
 			benchmark.AddSubSample(bench.NewSample(numMsgs, msgSize, start, time.Now(), nc))
 			donewg.Done()
 			nc.Close()
