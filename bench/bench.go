@@ -66,8 +66,10 @@ func NewBenchmark(name string, subCnt, pubCnt int, num int,size int) *Benchmark 
 }
 
 func (bm *Benchmark) AddSubLatency(subIndex int, latency int) {
-	bm.subLatency[bm.msgNum*subIndex+bm.subLatencyIndex[subIndex]]=latency
-	bm.subLatencyIndex[subIndex]+=1
+	if(bm.subLatencyIndex[subIndex]<bm.msgNum){
+		bm.subLatency[bm.msgNum*subIndex+bm.subLatencyIndex[subIndex]]=latency
+		bm.subLatencyIndex[subIndex]+=1
+	}
 }
 
 func (bm *Benchmark) ExportLatency(size int){
